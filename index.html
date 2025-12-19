@@ -30,15 +30,42 @@
             align-items: center; justify-content: center;
             z-index: 50;
         }
+        
+        /* Modal Styles */
+        .modal-backdrop {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 60;
+        }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
 
     <!-- Loading Screen -->
     <div id="loading-screen" class="loading-overlay">
-        <!-- SVG hardcoded for loading screen to avoid lucide dependency on init -->
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin mb-4"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
         <p class="text-slate-500 font-medium">Cargando sistema CCAP...</p>
+    </div>
+
+    <!-- Notes Modal -->
+    <div id="note-modal" class="modal-backdrop hidden">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]">
+            <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
+                    <i data-lucide="file-text" class="w-5 h-5 text-blue-600"></i> Texto Detectado / Notas
+                </h3>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-6 h-6"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto bg-slate-50">
+                <pre id="modal-content" class="whitespace-pre-wrap text-sm text-slate-700 font-sans"></pre>
+            </div>
+            <div class="px-6 py-3 border-t border-slate-200 bg-white rounded-b-lg flex justify-end">
+                <button onclick="closeModal()" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition text-sm">Cerrar</button>
+            </div>
+        </div>
     </div>
 
     <!-- Header -->
@@ -50,7 +77,7 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-bold text-slate-900">CCAP Lead Manager</h1>
-                    <p class="text-xs text-slate-500">Gestión de Interesados</p>
+                    <p class="text-xs text-slate-500">Gestión de Interesados (Compartido)</p>
                 </div>
             </div>
             <div class="flex gap-2">
@@ -211,6 +238,7 @@
                                 <th class="px-4 py-3">Nombre</th>
                                 <th class="px-4 py-3">Contacto</th>
                                 <th class="px-4 py-3">Curso</th>
+                                <th class="px-4 py-3 text-center">+Info</th>
                                 <th class="px-4 py-3">Estado</th>
                                 <th class="px-4 py-3 text-right">Acción</th>
                             </tr>
@@ -232,7 +260,8 @@
         import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Config ---
-        // Se usa la configuración del entorno si existe (para la vista previa), de lo contrario se usa la tuya.
+        // Se usa la configuración del entorno si existe (para la vista previa), 
+        // de lo contrario se usa la tuya ESPECÍFICA para que funcione en local.
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyAL6pwDfIe9808a-UFXPmRy8VyoL-0noxo",
             authDomain: "basededatos-ccap.firebaseapp.com",
@@ -272,14 +301,15 @@
             if (user) {
                 currentUser = user;
                 document.getElementById('loading-screen').style.display = 'none';
-                startFirestoreListener(user.uid);
+                startFirestoreListener();
             }
         });
 
-        // --- Firestore ---
-        function startFirestoreListener(userId) {
+        // --- Firestore (COMPARTIDO PÚBLICO) ---
+        // Se usa la ruta /artifacts/{appId}/public/data/ccap_leads para evitar errores de permisos
+        function startFirestoreListener() {
             const q = query(
-                collection(db, 'artifacts', appId, 'users', userId, 'ccap_leads'),
+                collection(db, 'artifacts', appId, 'public', 'data', 'ccap_leads'),
                 orderBy('createdAt', 'desc')
             );
 
@@ -292,10 +322,13 @@
                 updateCount(allLeads.length);
             }, (error) => {
                 console.error("Firestore error:", error);
+                if (error.code === 'permission-denied') {
+                    alert("Error de permisos.");
+                }
             });
         }
 
-        // --- Global Functions (Attached to window for HTML access) ---
+        // --- Global Functions ---
         
         window.handleSaveLead = async () => {
             if (!currentUser) return;
@@ -313,12 +346,14 @@
             }
 
             try {
-                await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'ccap_leads'), {
+                // Guardar en ruta pública compartida
+                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'ccap_leads'), {
                     name, phone, email, course, status, notes,
+                    createdBy: currentUser.uid,
                     createdAt: serverTimestamp()
                 });
 
-                // Reset Form and State
+                // Reset Form
                 document.getElementById('form-name').value = '';
                 document.getElementById('form-phone').value = '';
                 document.getElementById('form-email').value = '';
@@ -333,22 +368,23 @@
                 
             } catch (err) {
                 console.error("Error saving lead", err);
-                alert("Error al guardar.");
+                alert("Error al guardar: " + err.message);
             }
         };
 
         window.deleteLead = async (id) => {
             if (!confirm('¿Estás seguro de eliminar este lead?')) return;
             try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'ccap_leads', id));
+                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ccap_leads', id));
             } catch (err) {
                 console.error("Error deleting", err);
+                alert("Error al eliminar.");
             }
         };
 
         window.updateStatus = async (id, newStatus) => {
             try {
-                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'ccap_leads', id), {
+                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ccap_leads', id), {
                     status: newStatus
                 });
             } catch (err) {
@@ -356,7 +392,7 @@
             }
         };
 
-        // --- Rendering ---
+        // --- UI Rendering ---
         function renderTable(leads) {
             const tbody = document.getElementById('leads-table-body');
             tbody.innerHTML = '';
@@ -364,7 +400,7 @@
             if (leads.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="5" class="px-4 py-8 text-center text-slate-400">
+                        <td colspan="6" class="px-4 py-8 text-center text-slate-400">
                             No hay leads registrados aún.
                         </td>
                     </tr>`;
@@ -387,6 +423,9 @@
                     'Perdido': 'bg-gray-100 text-gray-800 border-gray-200'
                 };
                 const badgeClass = statusColors[lead.status] || statusColors['Nuevo'];
+                
+                const rawNotes = lead.notes || '';
+                const hasNotes = rawNotes.trim().length > 0;
 
                 tr.innerHTML = `
                     <td class="px-4 py-3">
@@ -401,6 +440,13 @@
                     </td>
                     <td class="px-4 py-3 text-slate-600 text-xs md:text-sm">
                         ${escapeHtml(lead.course || '-')}
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        ${hasNotes ? 
+                            `<button onclick="openNote('${escapeHtmlAttribute(rawNotes)}')" class="text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 p-1.5 rounded-md transition-colors" title="Ver texto completo">
+                                <i data-lucide="file-text" class="w-4 h-4"></i>
+                             </button>` 
+                            : '<span class="text-slate-300">-</span>'}
                     </td>
                     <td class="px-4 py-3">
                         <select onchange="updateStatus('${lead.id}', this.value)" 
@@ -419,7 +465,6 @@
                 `;
                 tbody.appendChild(tr);
             });
-            // Safe icon refresh
             refreshIcons();
         }
 
@@ -431,6 +476,26 @@
             if (!text) return '';
             return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
+        
+        function escapeHtmlAttribute(text) {
+            if (!text) return '';
+            return text.replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, "\\n");
+        }
+        
+        // --- Modal Logic ---
+        window.openNote = (text) => {
+            const content = document.getElementById('modal-content');
+            content.innerText = text;
+            document.getElementById('note-modal').classList.remove('hidden');
+        };
+        
+        window.closeModal = () => {
+            document.getElementById('note-modal').classList.add('hidden');
+        };
+
+        document.getElementById('note-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'note-modal') window.closeModal();
+        });
 
     </script>
 
@@ -438,14 +503,10 @@
     <script>
         let currentImageBlob = null;
         
-        // --- SAFE ICON REFRESH ---
         function refreshIcons() {
-            if (window.lucide) {
-                window.lucide.createIcons();
-            }
+            if (window.lucide) window.lucide.createIcons();
         }
 
-        // --- Tab Switching ---
         function switchTab(tabName) {
             document.getElementById('tab-content-text').classList.add('hidden');
             document.getElementById('tab-content-image').classList.add('hidden');
@@ -463,27 +524,24 @@
             activeBtn.classList.add('border-blue-600', 'text-blue-700');
         }
 
-        // --- ENHANCED PARSING LOGIC ---
+        // --- PARSING LOGIC ---
         function parseLeadData(text) {
             const data = { name: '', phone: '', email: '', course: '', raw: text };
             
-            // 1. Email
             const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
             const emailMatch = text.match(emailRegex);
             if (emailMatch) data.email = emailMatch[0];
 
-            // 2. Phone (Flexible)
             const potentialPhones = text.match(/[\d\s\-\+\(\)]{8,}/g);
             if (potentialPhones) {
                 const bestPhone = potentialPhones.find(p => p.replace(/\D/g, '').length >= 8);
                 if (bestPhone) data.phone = bestPhone.trim();
             }
 
-            // 3. Name (Mejorado)
             const namePatterns = [
-                /(?:soy|mi nombre es|me llamo|hola soy)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i, // Soy Juan Perez
-                /(?:soy|mi nombre es|me llamo|hola soy)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)/i, // Soy Juan
-                /nombre:\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i // Nombre: Juan Perez
+                /(?:soy|mi nombre es|me llamo|hola soy)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i,
+                /(?:soy|mi nombre es|me llamo|hola soy)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)/i,
+                /nombre:\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i
             ];
 
             for (let pattern of namePatterns) {
@@ -494,7 +552,6 @@
                 }
             }
 
-            // Fallback para nombre: Si la primera línea es corta y no es un saludo genérico
             if (!data.name) {
                 const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
                 if (lines.length > 0) {
@@ -505,7 +562,6 @@
                 }
             }
 
-            // 4. Course (Mejorado)
             const coursePatterns = [
                 /(?:info|interés|precio|costo)\s+(?:sobre|de|del|en)\s+(?:el\s+)?(?:curso|taller|capacitación)\s+de\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
                 /(?:curso|taller|carrera)\s+de\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
@@ -531,7 +587,6 @@
                     }
                 }
             }
-
             return data;
         }
 
@@ -541,7 +596,6 @@
             document.getElementById('form-email').value = data.email || '';
             document.getElementById('form-course').value = data.course || '';
             document.getElementById('form-notes').value = noteContent || '';
-            
             document.getElementById('detected-msg').classList.remove('hidden');
             switchTab('manual');
         }
@@ -573,7 +627,6 @@
             handleImageFile(file);
         }
 
-        // Updated for Tesseract v5 pattern
         async function handleImageFile(file) {
             const preview = document.getElementById('image-preview');
             const placeholder = document.getElementById('upload-placeholder');
@@ -582,7 +635,6 @@
 
             currentImageBlob = file;
 
-            // Show Preview
             const reader = new FileReader();
             reader.onload = (e) => {
                 preview.src = e.target.result;
@@ -595,28 +647,19 @@
             actions.classList.add('hidden');
 
             try {
-                // --- IMAGE PRE-PROCESSING (Upscaling) ---
                 const bitmap = await createImageBitmap(file);
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
-                
                 const scale = 2; 
                 canvas.width = bitmap.width * scale;
                 canvas.height = bitmap.height * scale;
-                
                 ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-                
                 const processedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 
-                // --- OCR EXECUTION (Tesseract v5 Syntax) ---
-                // Create Worker with new Syntax
                 const worker = await Tesseract.createWorker('spa');
-                // Run recognition
                 const { data: { text } } = await worker.recognize(processedBlob);
-                // Terminate
                 await worker.terminate();
                 
-                // Parse
                 const data = parseLeadData(text);
                 
                 loading.classList.add('hidden');
@@ -648,7 +691,6 @@
             if(currentImageBlob) handleImageFile(currentImageBlob);
         }
 
-        // --- Other Utilities ---
         function filterLeads() {
             const query = document.getElementById('search-input').value.toLowerCase();
             const rows = document.querySelectorAll('#leads-table-body tr');
@@ -666,12 +708,17 @@
             }
             const data = rows.map(row => {
                 const cells = row.querySelectorAll('td');
+                // Notas extraídas del modal button (si existe) o celda
+                // Usamos el atributo onclick para extraer el texto crudo si es necesario
+                // Pero más fácil: exportamos lo visible o accedemos a los datos globales 'allLeads'
+                // Mejor opción: acceder a allLeads que ya tenemos en memoria
                 return {
                     'Nombre': cells[0].querySelector('div.font-medium').innerText,
                     'Fecha': cells[0].querySelector('div.text-xs').innerText,
                     'Contacto': cells[1].innerText.replace(/\n/g, ' '),
                     'Curso': cells[2].innerText.trim(),
-                    'Estado': cells[3].querySelector('select').value
+                    'Info/Notas': row.querySelector('button[title="Ver texto completo"]') ? 'Si (Ver en app)' : '-', 
+                    'Estado': cells[4].querySelector('select').value
                 };
             });
             const ws = XLSX.utils.json_to_sheet(data);
