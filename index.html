@@ -227,14 +227,26 @@
     <!-- App Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // --- Config ---
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        // Se usa la configuración del entorno si existe (para la vista previa), de lo contrario se usa la tuya.
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "AIzaSyAL6pwDfIe9808a-UFXPmRy8VyoL-0noxo",
+            authDomain: "basededatos-ccap.firebaseapp.com",
+            projectId: "basededatos-ccap",
+            storageBucket: "basededatos-ccap.firebasestorage.app",
+            messagingSenderId: "728455576478",
+            appId: "1:728455576478:web:33e8ca8c8a5aa480a0f48f",
+            measurementId: "G-12MGT33R52"
+        };
+        
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'ccap-default';
         
         const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
