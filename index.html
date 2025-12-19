@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CCAP Lead Manager</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Lucide Icons (Fixed UMD build for better browser support) -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+
+    <!-- External Libraries -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <!-- Tesseract.js v5 -->
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        .loading-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(255, 255, 255, 0.9);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+
+    <!-- Loading Screen -->
+    <div id="loading-screen" class="loading-overlay">
+        <!-- SVG hardcoded for loading screen to avoid lucide dependency on init -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin mb-4"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+        <p class="text-slate-500 font-medium">Cargando sistema CCAP...</p>
+    </div>
+
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-600 text-white p-2 rounded-lg">
+                    <i data-lucide="database" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-900">CCAP Lead Manager</h1>
+                    <p class="text-xs text-slate-500">Gestión de Interesados</p>
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="exportToExcel()" class="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors text-sm font-medium shadow-sm">
+                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Exportar Excel
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Left Column: Input Methods -->
+        <div class="lg:col-span-1 space-y-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <!-- Tabs -->
+                <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex gap-4">
+                    <button onclick="switchTab('text')" id="tab-btn-text" class="text-sm font-medium pb-1 border-b-2 border-blue-600 text-blue-700 transition-colors">
+                        Texto / WhatsApp
+                    </button>
+                    <button onclick="switchTab('image')" id="tab-btn-image" class="text-sm font-medium pb-1 border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">
+                        Captura
+                    </button>
+                    <button onclick="switchTab('manual')" id="tab-btn-manual" class="text-sm font-medium pb-1 border-b-2 border-transparent text-slate-500 hover:text-slate-700 transition-colors">
+                        Manual
+                    </button>
+                </div>
+
+                <div class="p-4">
+                    <!-- Text Tab -->
+                    <div id="tab-content-text" class="space-y-4">
+                        <p class="text-xs text-slate-500">
+                            Pega aquí la conversación o el mensaje. El sistema detectará: Nombre, Celular, Email y Curso.
+                        </p>
+                        <textarea id="input-text" class="w-full h-40 p-3 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none" placeholder="Ej: Hola, soy Juan Perez. Me interesa el curso de Refrigeración..."></textarea>
+                        <button onclick="handleTextProcess()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors flex items-center justify-center gap-2">
+                            <i data-lucide="refresh-cw" class="w-4 h-4"></i> Procesar Datos
+                        </button>
+                    </div>
+
+                    <!-- Image Tab -->
+                    <div id="tab-content-image" class="space-y-4 text-center hidden">
+                        <!-- Drop/Paste Area -->
+                        <div id="drop-zone" onclick="document.getElementById('file-input').click()" class="border-2 border-dashed border-slate-300 rounded-lg h-48 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 hover:border-blue-400 transition-colors relative overflow-hidden group">
+                            
+                            <!-- Loading Overlay for OCR -->
+                            <div id="ocr-loading" class="hidden absolute inset-0 bg-white bg-opacity-95 flex flex-col items-center justify-center z-20">
+                                <i data-lucide="loader-2" class="w-8 h-8 text-blue-600 animate-spin mb-2"></i>
+                                <span class="text-sm text-blue-600 font-bold">Procesando imagen...</span>
+                                <span class="text-xs text-slate-500 mt-1">Mejorando calidad y leyendo texto</span>
+                            </div>
+
+                            <!-- Preview Image -->
+                            <img id="image-preview" class="hidden absolute inset-0 w-full h-full object-contain bg-slate-100 p-2 z-10" />
+
+                            <!-- Default State -->
+                            <div id="upload-placeholder" class="flex flex-col items-center p-4">
+                                <i data-lucide="image-plus" class="w-10 h-10 text-slate-400 mb-3 group-hover:text-blue-500 transition-colors"></i>
+                                <span class="text-sm font-semibold text-slate-700">Click para subir</span>
+                                <span class="text-sm text-slate-500 my-1">- o -</span>
+                                <span class="text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">Pega tu imagen (Ctrl + V)</span>
+                                <span class="text-xs text-slate-400 mt-3">JPG, PNG, Capturas de WhatsApp</span>
+                            </div>
+                        </div>
+                        
+                        <input type="file" id="file-input" class="hidden" accept="image/*" onchange="handleImageUpload(event)">
+                        
+                        <div id="image-actions" class="hidden flex gap-2">
+                            <button onclick="resetImageTab()" class="flex-1 text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 py-2 rounded transition-colors">
+                                Cancelar
+                            </button>
+                            <button onclick="processCurrentPreview()" class="flex-1 text-xs bg-blue-600 hover:bg-blue-700 text-white py-2 rounded transition-colors">
+                                Re-intentar lectura
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Manual Form Tab -->
+                    <div id="tab-content-manual" class="space-y-3 hidden">
+                        <div id="detected-msg" class="hidden bg-green-50 border border-green-200 text-green-800 px-3 py-2 rounded-md text-xs mb-2 flex items-center gap-2">
+                            <i data-lucide="check-circle" class="w-4 h-4"></i> Datos leídos. Verifica abajo.
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Nombre</label>
+                            <div class="relative">
+                                <i data-lucide="user" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"></i>
+                                <input type="text" id="form-name" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500" placeholder="Nombre Completo">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Teléfono</label>
+                            <div class="relative">
+                                <i data-lucide="phone" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"></i>
+                                <input type="text" id="form-phone" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500" placeholder="351...">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Email</label>
+                            <div class="relative">
+                                <i data-lucide="mail" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"></i>
+                                <input type="email" id="form-email" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500" placeholder="correo@ejemplo.com">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Curso de Interés</label>
+                            <div class="relative">
+                                <i data-lucide="book-open" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"></i>
+                                <input type="text" id="form-course" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500" placeholder="Ej: Refrigeración">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Estado Inicial</label>
+                            <select id="form-status" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-md">
+                                <option value="Nuevo">Nuevo</option>
+                                <option value="Contactado">Contactado</option>
+                                <option value="Inscripto">Inscripto</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Visible Textarea for Raw Notes -->
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Texto Detectado / Notas</label>
+                            <textarea id="form-notes" class="w-full h-24 p-2 text-xs border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 resize-none text-slate-500" placeholder="Aquí aparecerá el texto leído de la imagen..."></textarea>
+                        </div>
+
+                        <button onclick="handleSaveLead()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors mt-2 flex items-center justify-center gap-2">
+                            <i data-lucide="save" class="w-4 h-4"></i> Guardar Lead
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: List & Data -->
+        <div class="lg:col-span-2">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full min-h-[500px]">
+                <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                    <h2 class="font-semibold text-slate-700 flex items-center gap-2">
+                        <div class="w-2 h-2 rounded-full bg-blue-500"></div>
+                        <span id="db-title">Base de Datos (0)</span>
+                    </h2>
+                    <div class="relative">
+                        <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"></i>
+                        <input type="text" id="search-input" onkeyup="filterLeads()" placeholder="Buscar..." class="pl-8 pr-3 py-1.5 text-sm border border-slate-300 rounded-full w-48 focus:outline-none focus:border-blue-500">
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 text-slate-500 font-medium border-b border-slate-200">
+                            <tr>
+                                <th class="px-4 py-3">Nombre</th>
+                                <th class="px-4 py-3">Contacto</th>
+                                <th class="px-4 py-3">Curso</th>
+                                <th class="px-4 py-3">Estado</th>
+                                <th class="px-4 py-3 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leads-table-body" class="divide-y divide-slate-100">
+                            <!-- Rows will be injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- App Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Config ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'ccap-default';
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUser = null;
+        let allLeads = [];
+
+        // --- Auth & Init ---
+        async function initAuth() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Auth error:", error);
+            }
+        }
+
+        initAuth();
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('loading-screen').style.display = 'none';
+                startFirestoreListener(user.uid);
+            }
+        });
+
+        // --- Firestore ---
+        function startFirestoreListener(userId) {
+            const q = query(
+                collection(db, 'artifacts', appId, 'users', userId, 'ccap_leads'),
+                orderBy('createdAt', 'desc')
+            );
+
+            onSnapshot(q, (snapshot) => {
+                allLeads = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                renderTable(allLeads);
+                updateCount(allLeads.length);
+            }, (error) => {
+                console.error("Firestore error:", error);
+            });
+        }
+
+        // --- Global Functions (Attached to window for HTML access) ---
+        
+        window.handleSaveLead = async () => {
+            if (!currentUser) return;
+            
+            const name = document.getElementById('form-name').value;
+            const phone = document.getElementById('form-phone').value;
+            const email = document.getElementById('form-email').value;
+            const course = document.getElementById('form-course').value;
+            const status = document.getElementById('form-status').value;
+            const notes = document.getElementById('form-notes').value;
+
+            if (!name && !phone) {
+                alert("Por favor ingresa al menos un Nombre o Teléfono.");
+                return;
+            }
+
+            try {
+                await addDoc(collection(db, 'artifacts', appId, 'users', currentUser.uid, 'ccap_leads'), {
+                    name, phone, email, course, status, notes,
+                    createdAt: serverTimestamp()
+                });
+
+                // Reset Form and State
+                document.getElementById('form-name').value = '';
+                document.getElementById('form-phone').value = '';
+                document.getElementById('form-email').value = '';
+                document.getElementById('form-course').value = '';
+                document.getElementById('form-status').value = 'Nuevo';
+                document.getElementById('form-notes').value = '';
+                document.getElementById('input-text').value = '';
+                document.getElementById('detected-msg').classList.add('hidden');
+                
+                resetImageTab();
+                switchTab('text');
+                
+            } catch (err) {
+                console.error("Error saving lead", err);
+                alert("Error al guardar.");
+            }
+        };
+
+        window.deleteLead = async (id) => {
+            if (!confirm('¿Estás seguro de eliminar este lead?')) return;
+            try {
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'ccap_leads', id));
+            } catch (err) {
+                console.error("Error deleting", err);
+            }
+        };
+
+        window.updateStatus = async (id, newStatus) => {
+            try {
+                await updateDoc(doc(db, 'artifacts', appId, 'users', currentUser.uid, 'ccap_leads', id), {
+                    status: newStatus
+                });
+            } catch (err) {
+                console.error("Error updating status", err);
+            }
+        };
+
+        // --- Rendering ---
+        function renderTable(leads) {
+            const tbody = document.getElementById('leads-table-body');
+            tbody.innerHTML = '';
+
+            if (leads.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="px-4 py-8 text-center text-slate-400">
+                            No hay leads registrados aún.
+                        </td>
+                    </tr>`;
+                return;
+            }
+
+            leads.forEach(lead => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 group border-b border-slate-100 last:border-0';
+                
+                let dateStr = '';
+                if (lead.createdAt && lead.createdAt.toDate) {
+                    dateStr = lead.createdAt.toDate().toLocaleDateString();
+                }
+
+                const statusColors = {
+                    'Nuevo': 'bg-blue-100 text-blue-800 border-blue-200',
+                    'Contactado': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+                    'Inscripto': 'bg-green-100 text-green-800 border-green-200',
+                    'Perdido': 'bg-gray-100 text-gray-800 border-gray-200'
+                };
+                const badgeClass = statusColors[lead.status] || statusColors['Nuevo'];
+
+                tr.innerHTML = `
+                    <td class="px-4 py-3">
+                        <div class="font-medium text-slate-800">${escapeHtml(lead.name || 'Sin nombre')}</div>
+                        <div class="text-xs text-slate-400">${dateStr}</div>
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="flex flex-col gap-1">
+                            ${lead.phone ? `<span class="flex items-center gap-1 text-xs text-slate-600"><i data-lucide="phone" class="w-3 h-3"></i> ${escapeHtml(lead.phone)}</span>` : ''}
+                            ${lead.email ? `<span class="flex items-center gap-1 text-xs text-slate-600 truncate max-w-[150px]" title="${escapeHtml(lead.email)}"><i data-lucide="mail" class="w-3 h-3"></i> ${escapeHtml(lead.email)}</span>` : ''}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 text-slate-600 text-xs md:text-sm">
+                        ${escapeHtml(lead.course || '-')}
+                    </td>
+                    <td class="px-4 py-3">
+                        <select onchange="updateStatus('${lead.id}', this.value)" 
+                            class="text-xs font-semibold px-2 py-1 rounded-full border ${badgeClass} cursor-pointer focus:outline-none focus:ring-2 ring-offset-1 ring-blue-500 appearance-none">
+                            <option value="Nuevo" ${lead.status === 'Nuevo' ? 'selected' : ''}>Nuevo</option>
+                            <option value="Contactado" ${lead.status === 'Contactado' ? 'selected' : ''}>Contactado</option>
+                            <option value="Inscripto" ${lead.status === 'Inscripto' ? 'selected' : ''}>Inscripto</option>
+                            <option value="Perdido" ${lead.status === 'Perdido' ? 'selected' : ''}>Perdido</option>
+                        </select>
+                    </td>
+                    <td class="px-4 py-3 text-right">
+                        <button onclick="deleteLead('${lead.id}')" class="text-slate-300 hover:text-red-500 transition-colors p-1" title="Eliminar">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+            // Safe icon refresh
+            refreshIcons();
+        }
+
+        function updateCount(count) {
+            document.getElementById('db-title').innerText = `Base de Datos (${count})`;
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+
+    </script>
+
+    <!-- UI Interaction & Parsing Logic -->
+    <script>
+        let currentImageBlob = null;
+        
+        // --- SAFE ICON REFRESH ---
+        function refreshIcons() {
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+        }
+
+        // --- Tab Switching ---
+        function switchTab(tabName) {
+            document.getElementById('tab-content-text').classList.add('hidden');
+            document.getElementById('tab-content-image').classList.add('hidden');
+            document.getElementById('tab-content-manual').classList.add('hidden');
+            
+            ['text', 'image', 'manual'].forEach(t => {
+                const btn = document.getElementById(`tab-btn-${t}`);
+                btn.classList.remove('border-blue-600', 'text-blue-700');
+                btn.classList.add('border-transparent', 'text-slate-500');
+            });
+
+            document.getElementById(`tab-content-${tabName}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tab-btn-${tabName}`);
+            activeBtn.classList.remove('border-transparent', 'text-slate-500');
+            activeBtn.classList.add('border-blue-600', 'text-blue-700');
+        }
+
+        // --- ENHANCED PARSING LOGIC ---
+        function parseLeadData(text) {
+            const data = { name: '', phone: '', email: '', course: '', raw: text };
+            
+            // 1. Email
+            const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
+            const emailMatch = text.match(emailRegex);
+            if (emailMatch) data.email = emailMatch[0];
+
+            // 2. Phone (Flexible)
+            const potentialPhones = text.match(/[\d\s\-\+\(\)]{8,}/g);
+            if (potentialPhones) {
+                const bestPhone = potentialPhones.find(p => p.replace(/\D/g, '').length >= 8);
+                if (bestPhone) data.phone = bestPhone.trim();
+            }
+
+            // 3. Name (Mejorado)
+            const namePatterns = [
+                /(?:soy|mi nombre es|me llamo|hola soy)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i, // Soy Juan Perez
+                /(?:soy|mi nombre es|me llamo|hola soy)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)/i, // Soy Juan
+                /nombre:\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i // Nombre: Juan Perez
+            ];
+
+            for (let pattern of namePatterns) {
+                const match = text.match(pattern);
+                if (match && match[1]) {
+                    data.name = match[1].trim();
+                    break;
+                }
+            }
+
+            // Fallback para nombre: Si la primera línea es corta y no es un saludo genérico
+            if (!data.name) {
+                const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                if (lines.length > 0) {
+                    const firstLine = lines[0];
+                    if (firstLine.split(' ').length < 5 && !/\d/.test(firstLine) && firstLine.toLowerCase() !== 'hola') {
+                        data.name = firstLine.replace(/^hola[\s,.]*/i, '').trim();
+                    }
+                }
+            }
+
+            // 4. Course (Mejorado)
+            const coursePatterns = [
+                /(?:info|interés|precio|costo)\s+(?:sobre|de|del|en)\s+(?:el\s+)?(?:curso|taller|capacitación)\s+de\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+                /(?:curso|taller|carrera)\s+de\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+                /(?:quiero|quisiera)\s+(?:aprender|estudiar)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i
+            ];
+
+            const keywords = ['refrigeración', 'aire acondicionado', 'electricidad', 'manicuría', 'pestañas', 'uñas', 'gestoría', 'excel', 'programación', 'rrhh', 'recursos humanos', 'liquidación'];
+            
+            for (let pattern of coursePatterns) {
+                const match = text.match(pattern);
+                if (match && match[1]) {
+                    data.course = match[1].split(' ').slice(0, 5).join(' ').trim();
+                    break;
+                }
+            }
+
+            if (!data.course) {
+                const lowerText = text.toLowerCase();
+                for (let kw of keywords) {
+                    if (lowerText.includes(kw)) {
+                        data.course = kw.charAt(0).toUpperCase() + kw.slice(1);
+                        break;
+                    }
+                }
+            }
+
+            return data;
+        }
+
+        function fillForm(data, noteContent) {
+            document.getElementById('form-name').value = data.name || '';
+            document.getElementById('form-phone').value = data.phone || '';
+            document.getElementById('form-email').value = data.email || '';
+            document.getElementById('form-course').value = data.course || '';
+            document.getElementById('form-notes').value = noteContent || '';
+            
+            document.getElementById('detected-msg').classList.remove('hidden');
+            switchTab('manual');
+        }
+
+        function handleTextProcess() {
+            const text = document.getElementById('input-text').value;
+            if(!text.trim()) return;
+            const data = parseLeadData(text);
+            fillForm(data, text);
+        }
+
+        // --- PASTE & IMAGE LOGIC ---
+        window.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for (const item of items) {
+                if (item.type.indexOf('image') === 0) {
+                    e.preventDefault();
+                    const blob = item.getAsFile();
+                    switchTab('image');
+                    handleImageFile(blob);
+                    return; 
+                }
+            }
+        });
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            handleImageFile(file);
+        }
+
+        // Updated for Tesseract v5 pattern
+        async function handleImageFile(file) {
+            const preview = document.getElementById('image-preview');
+            const placeholder = document.getElementById('upload-placeholder');
+            const loading = document.getElementById('ocr-loading');
+            const actions = document.getElementById('image-actions');
+
+            currentImageBlob = file;
+
+            // Show Preview
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                preview.src = e.target.result;
+                preview.classList.remove('hidden');
+                placeholder.classList.add('hidden');
+            };
+            reader.readAsDataURL(file);
+
+            loading.classList.remove('hidden');
+            actions.classList.add('hidden');
+
+            try {
+                // --- IMAGE PRE-PROCESSING (Upscaling) ---
+                const bitmap = await createImageBitmap(file);
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                
+                const scale = 2; 
+                canvas.width = bitmap.width * scale;
+                canvas.height = bitmap.height * scale;
+                
+                ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                
+                const processedBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+
+                // --- OCR EXECUTION (Tesseract v5 Syntax) ---
+                // Create Worker with new Syntax
+                const worker = await Tesseract.createWorker('spa');
+                // Run recognition
+                const { data: { text } } = await worker.recognize(processedBlob);
+                // Terminate
+                await worker.terminate();
+                
+                // Parse
+                const data = parseLeadData(text);
+                
+                loading.classList.add('hidden');
+                actions.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    fillForm(data, text);
+                    document.getElementById('input-text').value = text;
+                }, 500);
+
+            } catch (err) {
+                console.error(err);
+                alert("Error al leer la imagen. Intenta de nuevo.");
+                loading.classList.add('hidden');
+                actions.classList.remove('hidden');
+            }
+        }
+
+        function resetImageTab() {
+            document.getElementById('image-preview').classList.add('hidden');
+            document.getElementById('upload-placeholder').classList.remove('hidden');
+            document.getElementById('ocr-loading').classList.add('hidden');
+            document.getElementById('image-actions').classList.add('hidden');
+            document.getElementById('file-input').value = '';
+            currentImageBlob = null;
+        }
+
+        function processCurrentPreview() {
+            if(currentImageBlob) handleImageFile(currentImageBlob);
+        }
+
+        // --- Other Utilities ---
+        function filterLeads() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const rows = document.querySelectorAll('#leads-table-body tr');
+            rows.forEach(row => {
+                const text = row.innerText.toLowerCase();
+                row.style.display = text.includes(query) ? '' : 'none';
+            });
+        }
+
+        function exportToExcel() {
+            const rows = Array.from(document.querySelectorAll('#leads-table-body tr'));
+            if(rows.length === 0 || rows[0].innerText.includes('No hay leads')) {
+                alert("No hay datos para exportar");
+                return;
+            }
+            const data = rows.map(row => {
+                const cells = row.querySelectorAll('td');
+                return {
+                    'Nombre': cells[0].querySelector('div.font-medium').innerText,
+                    'Fecha': cells[0].querySelector('div.text-xs').innerText,
+                    'Contacto': cells[1].innerText.replace(/\n/g, ' '),
+                    'Curso': cells[2].innerText.trim(),
+                    'Estado': cells[3].querySelector('select').value
+                };
+            });
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Leads CCAP");
+            XLSX.writeFile(wb, "Base_Leads_CCAP.xlsx");
+        }
+
+        window.addEventListener('load', () => refreshIcons());
+    </script>
+</body>
+</html>
