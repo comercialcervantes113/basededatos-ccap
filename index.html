@@ -80,6 +80,9 @@
                 </div>
             </div>
             <div class="flex gap-2">
+                <button onclick="deleteAllLeads()" class="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md transition-colors text-sm font-medium shadow-sm">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i> Borrar Todo
+                </button>
                 <button onclick="copyToClipboard()" class="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 px-4 py-2 rounded-md transition-colors text-sm font-medium shadow-sm">
                     <i data-lucide="copy" class="w-4 h-4"></i> Copiar Datos
                 </button>
@@ -371,6 +374,40 @@
             }
         };
 
+        window.deleteAllLeads = async () => {
+            if (!window.allLeads || window.allLeads.length === 0) {
+                alert("No hay datos para borrar.");
+                return;
+            }
+            
+            const confirm1 = confirm('¿ESTÁS SEGURO? Esto eliminará TODOS los leads permanentemente. Esta acción no se puede deshacer.');
+            if (!confirm1) return;
+            
+            const confirm2 = prompt('Por seguridad, escribe "BORRAR" (en mayúsculas) para confirmar la eliminación de todos los datos:');
+            if (confirm2 !== 'BORRAR') {
+                alert('Operación cancelada. No se borró ningún dato.');
+                return;
+            }
+
+            try {
+                document.getElementById('loading-screen').style.display = 'flex';
+                document.getElementById('loading-text').innerText = 'Borrando todos los datos...';
+                
+                // Borrar cada documento individualmente
+                for (const lead of window.allLeads) {
+                    await deleteDoc(doc(db, 'ccap_leads', lead.id));
+                }
+                
+                document.getElementById('loading-screen').style.display = 'none';
+                document.getElementById('loading-text').innerText = 'Conectando con la base de datos...';
+                alert("Todos los datos han sido eliminados correctamente.");
+            } catch (err) {
+                console.error("Error al borrar todo", err);
+                document.getElementById('loading-screen').style.display = 'none';
+                alert("Hubo un error al intentar eliminar los datos.");
+            }
+        };
+
         // --- Renderizado de UI ---
         function renderTable(leads) {
             const tbody = document.getElementById('leads-table-body');
@@ -527,23 +564,36 @@
             }
 
             const coursePatterns = [
-                /(?:info|interés|precio|costo)\s+(?:sobre|de|del|en)\s+(?:el\s+)?(?:curso|taller|capacitación)\s+de\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
-                /(?:curso|taller|carrera)\s+de\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+                /(?:info|interés|precio|costo)\s+(?:sobre|de|del|en)\s+(?:el\s+|la\s+)?(?:curso|taller|capacitación|diplomatura|carrera|programa)\s+(?:de|en)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
+                /(?:curso|taller|carrera|diplomatura|programa)\s+(?:de|en)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i,
                 /(?:quiero|quisiera)\s+(?:aprender|estudiar)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+)/i
             ];
 
-            const keywords = ['refrigeración', 'aire acondicionado', 'electricidad', 'manicuría', 'pestañas', 'uñas', 'gestoría', 'excel', 'programación', 'rrhh', 'recursos humanos', 'liquidación'];
+            const keywords = [
+                'oratoria', 'marketing digital', 'redacción de tesis', 'tesis',
+                'refrigeración', 'aire acondicionado', 'electricidad', 'manicuría', 
+                'pestañas', 'uñas', 'gestoría', 'excel', 'programación', 'rrhh', 
+                'recursos humanos', 'liquidación', 'auxiliar de farmacia',
+                'acompañante terapéutico', 'asistente materno', 'secretariado médico'
+            ];
             
             for (let pattern of coursePatterns) {
                 const match = text.match(pattern);
-                if (match && match[1]) { data.course = match[1].split(' ').slice(0, 5).join(' ').trim(); break; }
+                if (match && match[1]) { 
+                    // Tomamos el texto detectado hasta el primer punto, coma o salto de línea
+                    let extracted = match[1].split(/[.,;!?\n]/)[0].trim();
+                    // Limitar a 7 palabras para evitar capturar todo el párrafo
+                    data.course = extracted.split(' ').slice(0, 7).join(' ').trim(); 
+                    break; 
+                }
             }
 
             if (!data.course) {
                 const lowerText = text.toLowerCase();
                 for (let kw of keywords) {
                     if (lowerText.includes(kw)) {
-                        data.course = kw.charAt(0).toUpperCase() + kw.slice(1);
+                        // Capitalizar cada palabra de la keyword encontrada para mayor prolijidad
+                        data.course = kw.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                         break;
                     }
                 }
