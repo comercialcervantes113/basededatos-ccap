@@ -80,6 +80,9 @@
                 </div>
             </div>
             <div class="flex gap-2">
+                <button onclick="copyToClipboard()" class="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 px-4 py-2 rounded-md transition-colors text-sm font-medium shadow-sm">
+                    <i data-lucide="copy" class="w-4 h-4"></i> Copiar Datos
+                </button>
                 <button onclick="exportToExcel()" class="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors text-sm font-medium shadow-sm">
                     <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Exportar Excel
                 </button>
@@ -189,6 +192,14 @@
                         </div>
 
                         <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-1">Provincia / Localidad</label>
+                            <div class="relative">
+                                <i data-lucide="map-pin" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400"></i>
+                                <input type="text" id="form-location" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500" placeholder="Ej: Córdoba Capital">
+                            </div>
+                        </div>
+
+                        <div>
                             <label class="block text-xs font-semibold text-slate-600 mb-1">Estado Inicial</label>
                             <select id="form-status" class="w-full px-3 py-2 text-sm border border-slate-300 rounded-md">
                                 <option value="Nuevo">Nuevo</option>
@@ -282,6 +293,10 @@
             onSnapshot(q, (snapshot) => {
                 document.getElementById('loading-screen').style.display = 'none';
                 const leads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                
+                // Exponemos la lista globalmente para poder exportar/copiar fácilmente
+                window.allLeads = leads; 
+                
                 renderTable(leads);
                 updateCount(leads.length);
             }, (error) => {
@@ -302,6 +317,7 @@
             const phone = document.getElementById('form-phone').value;
             const email = document.getElementById('form-email').value;
             const course = document.getElementById('form-course').value;
+            const location = document.getElementById('form-location').value; // Nuevo campo
             const status = document.getElementById('form-status').value;
             const notes = document.getElementById('form-notes').value;
 
@@ -311,9 +327,8 @@
             }
 
             try {
-                // Guarda directamente en la colección raíz 'ccap_leads'
                 await addDoc(collection(db, 'ccap_leads'), {
-                    name, phone, email, course, status, notes,
+                    name, phone, email, course, location, status, notes,
                     createdBy: currentUserId,
                     createdAt: serverTimestamp()
                 });
@@ -323,6 +338,7 @@
                 document.getElementById('form-phone').value = '';
                 document.getElementById('form-email').value = '';
                 document.getElementById('form-course').value = '';
+                document.getElementById('form-location').value = '';
                 document.getElementById('form-status').value = 'Nuevo';
                 document.getElementById('form-notes').value = '';
                 document.getElementById('input-text').value = '';
@@ -368,6 +384,8 @@
             leads.forEach(lead => {
                 const tr = document.createElement('tr');
                 tr.className = 'hover:bg-slate-50 group border-b border-slate-100 last:border-0';
+                // Añadimos el dataset id para identificarlo al exportar
+                tr.dataset.id = lead.id;
                 
                 let dateStr = '';
                 if (lead.createdAt && lead.createdAt.toDate) {
@@ -476,7 +494,7 @@
 
         // --- EXTRACCIÓN DE DATOS ---
         function parseLeadData(text) {
-            const data = { name: '', phone: '', email: '', course: '', raw: text };
+            const data = { name: '', phone: '', email: '', course: '', location: '', raw: text };
             
             const emailMatch = text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
             if (emailMatch) data.email = emailMatch[0];
@@ -538,6 +556,7 @@
             document.getElementById('form-phone').value = data.phone || '';
             document.getElementById('form-email').value = data.email || '';
             document.getElementById('form-course').value = data.course || '';
+            document.getElementById('form-location').value = data.location || '';
             document.getElementById('form-notes').value = noteContent || '';
             document.getElementById('detected-msg').classList.remove('hidden');
             switchTab('manual');
@@ -633,7 +652,7 @@
             if(currentImageBlob) handleImageFile(currentImageBlob);
         }
 
-        // --- BUSQUEDA Y EXPORTACIÓN ---
+        // --- BUSQUEDA, EXPORTACIÓN Y COPIADO ---
         function filterLeads() {
             const query = document.getElementById('search-input').value.toLowerCase();
             const rows = document.querySelectorAll('#leads-table-body tr');
@@ -643,23 +662,63 @@
             });
         }
 
-        function exportToExcel() {
-            const rows = Array.from(document.querySelectorAll('#leads-table-body tr'));
-            if(rows.length === 0 || rows[0].innerText.includes('No hay leads')) {
-                alert("No hay datos para exportar");
+        // Función auxiliar para obtener los datos mapeados exactamente como pediste
+        function getExportData() {
+            if (!window.allLeads || window.allLeads.length === 0) return null;
+            
+            // Obtenemos solo las filas visibles (respeta la búsqueda)
+            const visibleRows = Array.from(document.querySelectorAll('#leads-table-body tr')).filter(r => r.style.display !== 'none' && r.dataset.id);
+            if (visibleRows.length === 0) return null;
+
+            return visibleRows.map(row => {
+                const leadId = row.dataset.id;
+                const lead = window.allLeads.find(l => l.id === leadId);
+                if (!lead) return null;
+                
+                // Mapeo EXACTO solicitado
+                return {
+                    'Nombre Completo': lead.name || '',
+                    'Teléfono / Celular': lead.phone || '',
+                    'Correo Electrónico': lead.email || '',
+                    'Curso de Interés': lead.course || '',
+                    'Provincia / Localidad': lead.location || ''
+                };
+            }).filter(Boolean);
+        }
+
+        async function copyToClipboard() {
+            const data = getExportData();
+            if (!data) {
+                alert("No hay datos para copiar.");
                 return;
             }
-            const data = rows.map(row => {
-                const cells = row.querySelectorAll('td');
-                return {
-                    'Nombre': cells[0].querySelector('div.font-medium').innerText,
-                    'Fecha': cells[0].querySelector('div.text-xs').innerText,
-                    'Contacto': cells[1].innerText.replace(/\n/g, ' '),
-                    'Curso': cells[2].innerText.trim(),
-                    'Info/Notas': row.querySelector('button[title="Ver texto completo"]') ? 'Si (Revisar web)' : '-', 
-                    'Estado': cells[4].querySelector('select').value
-                };
-            });
+            
+            // Convertimos el JSON a formato TSV (Valores separados por tabulación) para pegar directo en Excel
+            const headers = Object.keys(data[0]);
+            const tsvRows = data.map(row => headers.map(header => row[header]).join('\t'));
+            const tsvString = [headers.join('\t'), ...tsvRows].join('\n');
+            
+            try {
+                await navigator.clipboard.writeText(tsvString);
+                alert("¡Datos copiados al portapapeles! Puedes pegarlos directamente en Excel.");
+            } catch (err) {
+                // Fallback por si la API de clipboard está bloqueada
+                const textArea = document.createElement("textarea");
+                textArea.value = tsvString;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textArea);
+                alert("¡Datos copiados al portapapeles!");
+            }
+        }
+
+        function exportToExcel() {
+            const data = getExportData();
+            if (!data) {
+                alert("No hay datos para exportar.");
+                return;
+            }
             const ws = XLSX.utils.json_to_sheet(data);
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Leads CCAP");
