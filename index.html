@@ -8,16 +8,15 @@
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Lucide Icons (Fixed UMD build for better browser support) -->
+    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 
-    <!-- External Libraries -->
+    <!-- Librerías Externas -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
-    <!-- Tesseract.js v5 -->
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
 
     <style>
-        /* Custom Scrollbar */
+        /* Scrollbar personalizado */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -31,7 +30,7 @@
             z-index: 50;
         }
         
-        /* Modal Styles */
+        /* Estilos del Modal */
         .modal-backdrop {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0, 0, 0, 0.5);
@@ -42,18 +41,18 @@
 </head>
 <body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
 
-    <!-- Loading Screen -->
+    <!-- Pantalla de Carga -->
     <div id="loading-screen" class="loading-overlay">
         <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="animate-spin mb-4"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-        <p class="text-slate-500 font-medium">Cargando sistema CCAP...</p>
+        <p class="text-slate-500 font-medium" id="loading-text">Conectando con la base de datos...</p>
     </div>
 
-    <!-- Notes Modal -->
+    <!-- Modal para ver Notas/Texto Completo -->
     <div id="note-modal" class="modal-backdrop hidden">
         <div class="bg-white rounded-lg shadow-xl w-full max-w-lg mx-4 flex flex-col max-h-[80vh]">
             <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                 <h3 class="font-bold text-lg text-slate-800 flex items-center gap-2">
-                    <i data-lucide="file-text" class="w-5 h-5 text-blue-600"></i> Texto Detectado / Notas
+                    <i data-lucide="file-text" class="w-5 h-5 text-blue-600"></i> Texto Detectado
                 </h3>
                 <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600">
                     <i data-lucide="x" class="w-6 h-6"></i>
@@ -68,7 +67,7 @@
         </div>
     </div>
 
-    <!-- Header -->
+    <!-- Encabezado -->
     <header class="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
         <div class="max-w-6xl mx-auto px-4 py-4 flex justify-between items-center">
             <div class="flex items-center gap-3">
@@ -77,7 +76,7 @@
                 </div>
                 <div>
                     <h1 class="text-xl font-bold text-slate-900">CCAP Lead Manager</h1>
-                    <p class="text-xs text-slate-500">Gestión de Interesados (Compartido)</p>
+                    <p class="text-xs text-slate-500">Gestión de Interesados</p>
                 </div>
             </div>
             <div class="flex gap-2">
@@ -88,13 +87,13 @@
         </div>
     </header>
 
-    <!-- Main Content -->
+    <!-- Contenido Principal -->
     <main class="max-w-6xl mx-auto px-4 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        <!-- Left Column: Input Methods -->
+        <!-- Columna Izquierda: Ingreso de Datos -->
         <div class="lg:col-span-1 space-y-6">
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <!-- Tabs -->
+                <!-- Pestañas -->
                 <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex gap-4">
                     <button onclick="switchTab('text')" id="tab-btn-text" class="text-sm font-medium pb-1 border-b-2 border-blue-600 text-blue-700 transition-colors">
                         Texto / WhatsApp
@@ -108,7 +107,7 @@
                 </div>
 
                 <div class="p-4">
-                    <!-- Text Tab -->
+                    <!-- Pestaña Texto -->
                     <div id="tab-content-text" class="space-y-4">
                         <p class="text-xs text-slate-500">
                             Pega aquí la conversación o el mensaje. El sistema detectará: Nombre, Celular, Email y Curso.
@@ -119,28 +118,23 @@
                         </button>
                     </div>
 
-                    <!-- Image Tab -->
+                    <!-- Pestaña Imagen -->
                     <div id="tab-content-image" class="space-y-4 text-center hidden">
-                        <!-- Drop/Paste Area -->
                         <div id="drop-zone" onclick="document.getElementById('file-input').click()" class="border-2 border-dashed border-slate-300 rounded-lg h-48 flex flex-col items-center justify-center cursor-pointer hover:bg-slate-50 hover:border-blue-400 transition-colors relative overflow-hidden group">
-                            
-                            <!-- Loading Overlay for OCR -->
                             <div id="ocr-loading" class="hidden absolute inset-0 bg-white bg-opacity-95 flex flex-col items-center justify-center z-20">
                                 <i data-lucide="loader-2" class="w-8 h-8 text-blue-600 animate-spin mb-2"></i>
                                 <span class="text-sm text-blue-600 font-bold">Procesando imagen...</span>
                                 <span class="text-xs text-slate-500 mt-1">Mejorando calidad y leyendo texto</span>
                             </div>
 
-                            <!-- Preview Image -->
                             <img id="image-preview" class="hidden absolute inset-0 w-full h-full object-contain bg-slate-100 p-2 z-10" />
 
-                            <!-- Default State -->
                             <div id="upload-placeholder" class="flex flex-col items-center p-4">
                                 <i data-lucide="image-plus" class="w-10 h-10 text-slate-400 mb-3 group-hover:text-blue-500 transition-colors"></i>
                                 <span class="text-sm font-semibold text-slate-700">Click para subir</span>
                                 <span class="text-sm text-slate-500 my-1">- o -</span>
                                 <span class="text-sm font-semibold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">Pega tu imagen (Ctrl + V)</span>
-                                <span class="text-xs text-slate-400 mt-3">JPG, PNG, Capturas de WhatsApp</span>
+                                <span class="text-xs text-slate-400 mt-3">JPG, PNG, Capturas</span>
                             </div>
                         </div>
                         
@@ -156,7 +150,7 @@
                         </div>
                     </div>
 
-                    <!-- Manual Form Tab -->
+                    <!-- Pestaña Manual/Revisión -->
                     <div id="tab-content-manual" class="space-y-3 hidden">
                         <div id="detected-msg" class="hidden bg-green-50 border border-green-200 text-green-800 px-3 py-2 rounded-md text-xs mb-2 flex items-center gap-2">
                             <i data-lucide="check-circle" class="w-4 h-4"></i> Datos leídos. Verifica abajo.
@@ -203,10 +197,10 @@
                             </select>
                         </div>
                         
-                        <!-- Visible Textarea for Raw Notes -->
+                        <!-- Textarea visible para Notas RAW -->
                         <div>
                             <label class="block text-xs font-semibold text-slate-600 mb-1">Texto Detectado / Notas</label>
-                            <textarea id="form-notes" class="w-full h-24 p-2 text-xs border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 resize-none text-slate-500" placeholder="Aquí aparecerá el texto leído de la imagen..."></textarea>
+                            <textarea id="form-notes" class="w-full h-24 p-2 text-xs border border-slate-300 rounded-md focus:ring-1 focus:ring-blue-500 resize-none text-slate-500" placeholder="Aquí aparecerá el texto leído de la imagen o tus notas..."></textarea>
                         </div>
 
                         <button onclick="handleSaveLead()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-medium transition-colors mt-2 flex items-center justify-center gap-2">
@@ -217,7 +211,7 @@
             </div>
         </div>
 
-        <!-- Right Column: List & Data -->
+        <!-- Columna Derecha: Base de Datos -->
         <div class="lg:col-span-2">
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full min-h-[500px]">
                 <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
@@ -244,7 +238,7 @@
                             </tr>
                         </thead>
                         <tbody id="leads-table-body" class="divide-y divide-slate-100">
-                            <!-- Rows will be injected here -->
+                            <!-- Filas inyectadas por JS -->
                         </tbody>
                     </table>
                 </div>
@@ -252,17 +246,14 @@
         </div>
     </main>
 
-    <!-- App Logic -->
+    <!-- Integración Firebase -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-analytics.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- Config ---
-        // Se usa la configuración del entorno si existe (para la vista previa), 
-        // de lo contrario se usa la tuya ESPECÍFICA para que funcione en local.
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+        // Configuración exacta proporcionada
+        const firebaseConfig = {
             apiKey: "AIzaSyAL6pwDfIe9808a-UFXPmRy8VyoL-0noxo",
             authDomain: "basededatos-ccap.firebaseapp.com",
             projectId: "basededatos-ccap",
@@ -272,67 +263,41 @@
             measurementId: "G-12MGT33R52"
         };
         
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'ccap-default';
-        
         const app = initializeApp(firebaseConfig);
-        const analytics = getAnalytics(app);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        let currentUserId = 'anonymous-user';
 
-        let currentUser = null;
-        let allLeads = [];
-
-        // --- Auth & Init ---
-        async function initAuth() {
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (error) {
-                console.error("Auth error:", error);
-            }
-        }
-
-        initAuth();
-
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                document.getElementById('loading-screen').style.display = 'none';
-                startFirestoreListener();
-            }
+        // Inicializar Auth de fondo, pero NO bloquear la app si falla en GitHub Pages
+        signInAnonymously(auth).then((userCredential) => {
+            currentUserId = userCredential.user.uid;
+        }).catch((error) => {
+            console.warn("Auth anónimo falló (probablemente por cookies). Se usará ID genérico.", error);
         });
 
-        // --- Firestore (COMPARTIDO PÚBLICO) ---
-        // Se usa la ruta /artifacts/{appId}/public/data/ccap_leads para evitar errores de permisos
+        // Escuchar datos inmediatamente de la colección raíz 'ccap_leads'
         function startFirestoreListener() {
-            const q = query(
-                collection(db, 'artifacts', appId, 'public', 'data', 'ccap_leads'),
-                orderBy('createdAt', 'desc')
-            );
+            const q = query(collection(db, 'ccap_leads'), orderBy('createdAt', 'desc'));
 
             onSnapshot(q, (snapshot) => {
-                allLeads = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
-                renderTable(allLeads);
-                updateCount(allLeads.length);
+                document.getElementById('loading-screen').style.display = 'none';
+                const leads = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                renderTable(leads);
+                updateCount(leads.length);
             }, (error) => {
+                document.getElementById('loading-screen').style.display = 'none';
                 console.error("Firestore error:", error);
                 if (error.code === 'permission-denied') {
-                    alert("Error de permisos.");
+                    alert("Error de Permisos. Asegúrate de haber publicado las reglas de Firebase con 'if true'.");
                 }
             });
         }
-
-        // --- Global Functions ---
         
+        // Iniciar carga de datos al abrir la página
+        startFirestoreListener();
+
+        // --- Funciones Globales (Expuestas para los botones HTML) ---
         window.handleSaveLead = async () => {
-            if (!currentUser) return;
-            
             const name = document.getElementById('form-name').value;
             const phone = document.getElementById('form-phone').value;
             const email = document.getElementById('form-email').value;
@@ -346,14 +311,14 @@
             }
 
             try {
-                // Guardar en ruta pública compartida
-                await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'ccap_leads'), {
+                // Guarda directamente en la colección raíz 'ccap_leads'
+                await addDoc(collection(db, 'ccap_leads'), {
                     name, phone, email, course, status, notes,
-                    createdBy: currentUser.uid,
+                    createdBy: currentUserId,
                     createdAt: serverTimestamp()
                 });
 
-                // Reset Form
+                // Limpiar formulario
                 document.getElementById('form-name').value = '';
                 document.getElementById('form-phone').value = '';
                 document.getElementById('form-email').value = '';
@@ -375,7 +340,7 @@
         window.deleteLead = async (id) => {
             if (!confirm('¿Estás seguro de eliminar este lead?')) return;
             try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ccap_leads', id));
+                await deleteDoc(doc(db, 'ccap_leads', id));
             } catch (err) {
                 console.error("Error deleting", err);
                 alert("Error al eliminar.");
@@ -384,26 +349,19 @@
 
         window.updateStatus = async (id, newStatus) => {
             try {
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ccap_leads', id), {
-                    status: newStatus
-                });
+                await updateDoc(doc(db, 'ccap_leads', id), { status: newStatus });
             } catch (err) {
                 console.error("Error updating status", err);
             }
         };
 
-        // --- UI Rendering ---
+        // --- Renderizado de UI ---
         function renderTable(leads) {
             const tbody = document.getElementById('leads-table-body');
             tbody.innerHTML = '';
 
             if (leads.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="px-4 py-8 text-center text-slate-400">
-                            No hay leads registrados aún.
-                        </td>
-                    </tr>`;
+                tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-slate-400">No hay leads registrados aún.</td></tr>`;
                 return;
             }
 
@@ -449,8 +407,7 @@
                             : '<span class="text-slate-300">-</span>'}
                     </td>
                     <td class="px-4 py-3">
-                        <select onchange="updateStatus('${lead.id}', this.value)" 
-                            class="text-xs font-semibold px-2 py-1 rounded-full border ${badgeClass} cursor-pointer focus:outline-none focus:ring-2 ring-offset-1 ring-blue-500 appearance-none">
+                        <select onchange="updateStatus('${lead.id}', this.value)" class="text-xs font-semibold px-2 py-1 rounded-full border ${badgeClass} cursor-pointer focus:outline-none focus:ring-2 ring-offset-1 ring-blue-500 appearance-none">
                             <option value="Nuevo" ${lead.status === 'Nuevo' ? 'selected' : ''}>Nuevo</option>
                             <option value="Contactado" ${lead.status === 'Contactado' ? 'selected' : ''}>Contactado</option>
                             <option value="Inscripto" ${lead.status === 'Inscripto' ? 'selected' : ''}>Inscripto</option>
@@ -468,10 +425,8 @@
             refreshIcons();
         }
 
-        function updateCount(count) {
-            document.getElementById('db-title').innerText = `Base de Datos (${count})`;
-        }
-
+        function updateCount(count) { document.getElementById('db-title').innerText = `Base de Datos (${count})`; }
+        
         function escapeHtml(text) {
             if (!text) return '';
             return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
@@ -482,24 +437,19 @@
             return text.replace(/'/g, "\\'").replace(/"/g, "&quot;").replace(/\n/g, "\\n");
         }
         
-        // --- Modal Logic ---
+        // --- Lógica del Modal ---
         window.openNote = (text) => {
-            const content = document.getElementById('modal-content');
-            content.innerText = text;
+            document.getElementById('modal-content').innerText = text;
             document.getElementById('note-modal').classList.remove('hidden');
         };
         
-        window.closeModal = () => {
-            document.getElementById('note-modal').classList.add('hidden');
-        };
-
+        window.closeModal = () => document.getElementById('note-modal').classList.add('hidden');
         document.getElementById('note-modal').addEventListener('click', (e) => {
             if (e.target.id === 'note-modal') window.closeModal();
         });
-
     </script>
 
-    <!-- UI Interaction & Parsing Logic -->
+    <!-- UI, OCR, Parsing Script -->
     <script>
         let currentImageBlob = null;
         
@@ -524,12 +474,11 @@
             activeBtn.classList.add('border-blue-600', 'text-blue-700');
         }
 
-        // --- PARSING LOGIC ---
+        // --- EXTRACCIÓN DE DATOS ---
         function parseLeadData(text) {
             const data = { name: '', phone: '', email: '', course: '', raw: text };
             
-            const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/;
-            const emailMatch = text.match(emailRegex);
+            const emailMatch = text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/);
             if (emailMatch) data.email = emailMatch[0];
 
             const potentialPhones = text.match(/[\d\s\-\+\(\)]{8,}/g);
@@ -546,10 +495,7 @@
 
             for (let pattern of namePatterns) {
                 const match = text.match(pattern);
-                if (match && match[1]) {
-                    data.name = match[1].trim();
-                    break;
-                }
+                if (match && match[1]) { data.name = match[1].trim(); break; }
             }
 
             if (!data.name) {
@@ -572,10 +518,7 @@
             
             for (let pattern of coursePatterns) {
                 const match = text.match(pattern);
-                if (match && match[1]) {
-                    data.course = match[1].split(' ').slice(0, 5).join(' ').trim();
-                    break;
-                }
+                if (match && match[1]) { data.course = match[1].split(' ').slice(0, 5).join(' ').trim(); break; }
             }
 
             if (!data.course) {
@@ -607,15 +550,14 @@
             fillForm(data, text);
         }
 
-        // --- PASTE & IMAGE LOGIC ---
+        // --- LOGICA DE IMÁGENES / PEGAR ---
         window.addEventListener('paste', (e) => {
             const items = (e.clipboardData || e.originalEvent.clipboardData).items;
             for (const item of items) {
                 if (item.type.indexOf('image') === 0) {
                     e.preventDefault();
-                    const blob = item.getAsFile();
                     switchTab('image');
-                    handleImageFile(blob);
+                    handleImageFile(item.getAsFile());
                     return; 
                 }
             }
@@ -691,6 +633,7 @@
             if(currentImageBlob) handleImageFile(currentImageBlob);
         }
 
+        // --- BUSQUEDA Y EXPORTACIÓN ---
         function filterLeads() {
             const query = document.getElementById('search-input').value.toLowerCase();
             const rows = document.querySelectorAll('#leads-table-body tr');
@@ -708,16 +651,12 @@
             }
             const data = rows.map(row => {
                 const cells = row.querySelectorAll('td');
-                // Notas extraídas del modal button (si existe) o celda
-                // Usamos el atributo onclick para extraer el texto crudo si es necesario
-                // Pero más fácil: exportamos lo visible o accedemos a los datos globales 'allLeads'
-                // Mejor opción: acceder a allLeads que ya tenemos en memoria
                 return {
                     'Nombre': cells[0].querySelector('div.font-medium').innerText,
                     'Fecha': cells[0].querySelector('div.text-xs').innerText,
                     'Contacto': cells[1].innerText.replace(/\n/g, ' '),
                     'Curso': cells[2].innerText.trim(),
-                    'Info/Notas': row.querySelector('button[title="Ver texto completo"]') ? 'Si (Ver en app)' : '-', 
+                    'Info/Notas': row.querySelector('button[title="Ver texto completo"]') ? 'Si (Revisar web)' : '-', 
                     'Estado': cells[4].querySelector('select').value
                 };
             });
